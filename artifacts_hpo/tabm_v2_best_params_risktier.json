@@ -1,0 +1,23 @@
+{
+  "numerical_imputer": "mean",
+  "categorical_imputer": "most_frequent",
+  "features": null,
+  "num_embedding": "piecewise-linear",
+  "d_embedding": 8,
+  "n_bins": 16,
+  "arch_type": "tabm",
+  "k": 48,
+  "n_blocks": 5,
+  "d_block": 320,
+  "dropout": 0.04503102475225135,
+  "lr": 0.0015376421692652297,
+  "weight_decay": 0.000342149328666857,
+  "batch_size": 256,
+  "n_epochs": 53,
+  "patience": 15,
+  "use_cosine": true,
+  "warmup_epochs": 0,
+  "grad_clip": 1.0,
+  "label_smoothing": 0.04366404457541516,
+  "_best_value": 0.8895142096133591
+}

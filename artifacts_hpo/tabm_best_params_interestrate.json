@@ -1,0 +1,15 @@
+{
+  "numerical_imputer": "constant",
+  "categorical_imputer": "special",
+  "features": null,
+  "scale_numeric": true,
+  "k": 32,
+  "n_blocks": 5,
+  "d_block": 512,
+  "dropout": 0.1492387706793758,
+  "lr": 0.00202095445137553,
+  "weight_decay": 0.00014703450484812147,
+  "batch_size": 256,
+  "n_epochs": 62,
+  "patience": 10
+}

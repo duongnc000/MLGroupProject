@@ -1,0 +1,10 @@
+{
+  "random_state": 1215,
+  "test_size": 0.2,
+  "best_classification_model": "tuned_weighted_classification_ensemble",
+  "best_classification_validation_accuracy": 0.7978571428571428,
+  "best_regression_model": "tuned_weighted_regression_ensemble",
+  "best_regression_validation_r2": 0.8470225223673089,
+  "combined_local_score": 0.8224398326122259,
+  "submission_path": "submissions/submission.csv"
+}

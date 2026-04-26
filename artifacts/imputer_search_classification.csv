@@ -1,0 +1,9 @@
+task,model,numerical_imputer,categorical_imputer,features,cv_score
+classification,catboost,mean,most_frequent,credit_expert,0.8161714285714285
+classification,catboost,mean,special,credit_expert,0.8158857142857142
+classification,catboost,median,special,credit_expert,0.8158571428571427
+classification,catboost,median,most_frequent,credit_expert,0.8154285714285715
+classification,catboost,knn,special,credit_expert,0.8083714285714285
+classification,catboost,knn,most_frequent,credit_expert,0.8078571428571427
+classification,catboost,iterative,special,credit_expert,0.8042571428571428
+classification,catboost,iterative,most_frequent,credit_expert,0.8038285714285716

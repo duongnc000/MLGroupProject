@@ -1,0 +1,57 @@
+# Python bytecode and venvs
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# AutoGluon track (decided not to use as final approach)
+autogluon-testing/
+AutogluonModels/
+autogluon.py
+autogluon.ipynb
+train_autogluon_colab.py
+train_autogluon_colab.ipynb
+submission_autogluon.csv
+
+# CatBoost training logs (regenerated on every run)
+catboost_info/
+
+# Superseded scripts kept locally for reference, excluded from commit
+train_tabm_submission_from_old_json.py
+tune_tabm.py
+tune_tabm_preprocess.py
+
+# TabM + CatBoost blend (rejected: scored worse than pure TabM)
+train_ensemble_submission.py
+submission_ensemble.csv
+submission_both.csv
+
+# Inference-only path with pickled bundles, not part of final pipeline
+predict_to_csv.py
+artifacts_reproduced/
+
+# Old / duplicate submission CSVs
+submission_classic_3.csv
+submission_tabm_rerun.csv
+submissions/submission.csv
+
+# Scratch notebooks / files
+feat (2).ipynb
+feat_classic.ipynb
+old_json_2.py
+
+# Bundle archives (output, not source)
+*.zip
+
+# IDE / agent state
+.codex
+.claude/
+.vscode/
+.idea/
+.DS_Store
+
+# Local-only working files
+commit_and_report.md
+machine_learning_project_description.md

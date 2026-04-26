@@ -1,0 +1,15 @@
+{
+  "numerical_imputer": "mean",
+  "categorical_imputer": "most_frequent",
+  "features": "basic_credit_plus_logs",
+  "scale_numeric": true,
+  "k": 48,
+  "n_blocks": 5,
+  "d_block": 192,
+  "dropout": 0.040424520473236684,
+  "lr": 0.000269857005420709,
+  "weight_decay": 0.002121408630175934,
+  "batch_size": 512,
+  "n_epochs": 81,
+  "patience": 21
+}

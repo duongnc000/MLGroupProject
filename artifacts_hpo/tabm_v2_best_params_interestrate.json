@@ -1,0 +1,22 @@
+{
+  "numerical_imputer": "median",
+  "categorical_imputer": "special",
+  "features": "basic_credit",
+  "num_embedding": "piecewise-linear",
+  "d_embedding": 16,
+  "n_bins": 32,
+  "arch_type": "tabm-mini",
+  "k": 48,
+  "n_blocks": 5,
+  "d_block": 320,
+  "dropout": 0.10385245263439948,
+  "lr": 0.00034250539570808024,
+  "weight_decay": 0.0019328624590635105,
+  "batch_size": 256,
+  "n_epochs": 122,
+  "patience": 23,
+  "use_cosine": false,
+  "warmup_epochs": 5,
+  "grad_clip": 1.0,
+  "_best_value": 0.8493982476131133
+}
