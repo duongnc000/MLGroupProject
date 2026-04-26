@@ -59,3 +59,13 @@ machine_learning_project_description.pdf
 presentation_brief.md
 CLAUDE.md
 sample_submission.csv
+
+# LaTeX source kept local; only the compiled PDF (Placeholder_Report.pdf) ships
+report.tex
+figures/
+notebooks/make_figures.ipynb
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz

@@ -133,4 +133,4 @@ python credit_optuna_search.py
 
 - A GPU is preferred for the TabM track (`tune_tabm_v2.py` auto-selects CUDA if available); CPU works but is significantly slower.
 - The `train_tabm_kfold_submission.py` script reads `artifacts_hpo/tabm_v2_best_params_*.json` first and falls back to the v1 JSONs if the v2 files are missing.
-- See `report.tex` for the written project report.
+- See `Placeholder_Report.pdf` for the written project report.
