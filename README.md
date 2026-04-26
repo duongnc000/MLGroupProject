@@ -35,7 +35,6 @@ That's it for the final pipeline. Tuned hyperparameters are loaded from `artifac
 ```
 .
 ├── credit_train.csv, credit_test.csv      # input data (35k train, 15k test)
-├── sample_submission.csv                  # Kaggle's example submission
 │
 ├── src/creditsense/                       # packaged sklearn pipeline
 │   ├── config.py                          #   seeds, target/ID names, missing-flag list
