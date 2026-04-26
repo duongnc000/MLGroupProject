@@ -6,3 +6,8 @@ seaborn==0.13.2
 xgboost==2.1.1
 lightgbm==4.5.0
 catboost==1.2.10
+
+torch==2.11.0
+optuna==4.8.0
+tabm==0.0.3
+rtdl_num_embeddings==0.0.12

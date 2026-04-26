@@ -1,0 +1,395 @@
+% Compile with: pdflatex report.tex (run twice for cross-references)
+% Requires: booktabs, geometry, hyperref, xcolor, listings (all standard TeXLive)
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{titlesec}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=4pt,
+  xrightmargin=4pt
+}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\title{\textbf{CreditSense: Loan Risk Assessment Challenge}\\[2pt]\large AI1215 --- Project Report}
+\author{Team [team name] \\ \small Members: [your name] (\texttt{[kaggle handle]}), CDuongg (\texttt{[kaggle handle]})}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\section{Project Overview}
+
+The CreditSense challenge poses two coupled supervised-learning tasks on the same 35{,}000-row tabular dataset of personal-loan applicants (55 features per applicant). For every applicant in a 15{,}000-row test set we predict:
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Task A --- Classification:} \texttt{RiskTier} $\in \{0,1,2,3,4\}$, scored by accuracy.
+  \item \textbf{Task B --- Regression:} \texttt{InterestRate} $\in [4.99, 35.99]$ APR, scored by $R^2$.
+\end{itemize}
+
+The Kaggle public leaderboard reports a single combined score, $\text{Score} = 0.5 \cdot \text{Accuracy} + 0.5 \cdot R^2$. The reported baseline (logistic + linear) is $\approx 0.51$.
+
+\paragraph{High-level pipeline.} We took an iterative approach across three modeling families:
+
+\begin{enumerate}[leftmargin=*,nosep]
+  \item A packaged sklearn pipeline (\texttt{train.py} $\rightarrow$ \texttt{src/creditsense/}) that runs an 80/20 stratified holdout, trains baseline linear models on raw features, then trains XGBoost / LightGBM / CatBoost on engineered features and fits a weighted ensemble.
+  \item A standalone CatBoost-only submission (\texttt{train\_classic\_submission.py}) using Optuna-tuned hyperparameters.
+  \item A neural-tabular track based on \textbf{TabM} --- an ensemble of $k$ parallel MLPs sharing input embeddings --- searched with Optuna in two iterations (\texttt{tune\_tabm\_v2.py}). The TabM-v2 submission is our \textbf{final} approach.
+\end{enumerate}
+
+\paragraph{Final result.} Our best Kaggle public-leaderboard combined score is \textbf{0.88110}, produced by the TabM-v2 model (\texttt{submission\_tabm\_v2.csv}). This beats the logistic/linear baseline by $\approx 0.37$ and our best classic-booster submission by $\approx 0.037$.
+
+\section{Repository and Reproducibility Summary}
+
+\subsection{Layout}
+
+\begin{lstlisting}[language=bash]
+ML-Assignment/
++-- credit_train.csv, credit_test.csv, sample_submission.csv
++-- src/creditsense/             # packaged sklearn pipeline (config, features,
+|                                  modeling, training, __init__)
++-- train.py                     # entry point for packaged pipeline
++-- train_classic_submission.py  # CatBoost-only Optuna-tuned submission
++-- train_tabm_submission.py     # TabM v1 submission (LB 0.87417)
++-- train_tabm_kfold_submission.py  # TabM v2 submission (LB 0.88110, FINAL)
++-- tune_tabm_v2.py              # Optuna search that produced final params
++-- credit_optuna_search.py      # Optuna search for sklearn track
++-- artifacts/                   # CatBoost tuned params + imputer search CSVs
++-- artifacts_hpo/               # TabM v1 + v2 tuned params
++-- outputs/                     # data_profile.json, experiment_results.csv,
+|                                  run_summary.json
++-- submission.csv               # TabM v1 (LB 0.87417)
++-- submission_classic.csv       # CatBoost (LB 0.84443)
++-- submission_tabm_v2.csv       # TabM v2 (LB 0.88110, FINAL)
++-- notebooks/eda_starter.ipynb  # exploratory notebook
++-- README.txt, requirements.txt, CLAUDE.md, presentation_brief.md
+\end{lstlisting}
+
+\subsection{How to reproduce the final submission}
+
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Create a Python 3.10+ environment.
+  \item Install all dependencies: \texttt{pip install -r requirements.txt} (covers the sklearn / XGBoost / LightGBM / CatBoost stack as well as PyTorch, Optuna, TabM, and \texttt{rtdl\_num\_embeddings}).
+  \item Run \texttt{python train\_tabm\_kfold\_submission.py}. The script loads tuned hyperparameters from \texttt{artifacts\_hpo/tabm\_v2\_best\_params\_*.json}, trains TabM on the full training set for both tasks, and writes \texttt{submission\_tabm\_v2.csv}.
+  \item (Optional) re-run the search: \texttt{python tune\_tabm\_v2.py} regenerates the JSONs in \texttt{artifacts\_hpo/}.
+\end{enumerate}
+
+\subsection{Caveats and reproducibility risks}
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item Random seeds differ across tracks: the packaged sklearn pipeline uses \texttt{RANDOM\_STATE=1215} (defined in \texttt{src/creditsense/config.py}); the CatBoost and TabM scripts use \texttt{SEED=42}. Within a track, results are deterministic; across tracks, exact values are not directly comparable.
+  \item Validation regimes differ: the packaged pipeline uses an 80/20 stratified holdout; the Optuna searches use 3-fold CV (StratifiedKFold for classification, KFold for regression). Both protocols are reported below.
+  \item GPU is preferred for TabM (\texttt{tune\_tabm\_v2.py} auto-selects \texttt{cuda} if available); CPU works but is much slower.
+\end{itemize}
+
+\section{Data Exploration and Preprocessing}
+
+\subsection{Dataset shape}
+
+The training file \texttt{credit\_train.csv} contains 35{,}000 rows and 55 features plus two target columns. The test file \texttt{credit\_test.csv} has 15{,}000 rows with the same features. Features fall into five groups (per the assignment brief): Demographics (8), Employment \& Income (10), Assets \& Liabilities (9), Credit History (18), Loan Request (10).
+
+\subsection{Missingness analysis}
+
+The packaged pipeline writes \texttt{outputs/data\_profile.json} via \texttt{build\_data\_profile} in \texttt{src/creditsense/features.py}. The profile contains per-column missingness counts and basic numeric/categorical typing.
+
+\textbf{Meaningful-missing columns.} \texttt{src/creditsense/config.py} explicitly lists five columns where missingness encodes a category rather than measurement error:
+
+\begin{lstlisting}
+MEANINGFUL_MISSING_COLUMNS = [
+    "PropertyValue",                  # missing for renters
+    "MortgageOutstandingBalance",     # missing for non-homeowners
+    "StudentLoanOutstandingBalance",  # missing for older applicants
+    "CollateralValue",                # missing for unsecured loans
+    "SecondaryMonthlyIncome",         # missing for single-earner households
+]
+\end{lstlisting}
+
+These five fields drive the missing-flag feature engineering (Section~\ref{sec:fe}).
+
+\subsection{Validation strategy}
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Packaged sklearn pipeline:} a single 80/20 stratified holdout (\texttt{TEST\_SIZE=0.2}, \texttt{RANDOM\_STATE=1215}, stratified on \texttt{RiskTier}). Both tasks share the same split, so the combined local score $0.5 \cdot \text{Acc} + 0.5 \cdot R^2$ is internally comparable.
+  \item \textbf{Optuna searches} (\texttt{credit\_optuna\_search.py}, \texttt{tune\_tabm\_v2.py}): 3-fold cross-validation. Classification uses \texttt{StratifiedKFold}; regression uses \texttt{KFold}. Both with \texttt{shuffle=True} and \texttt{SEED=42}.
+\end{itemize}
+
+\subsection{Imputation and encoding}
+
+Three model families use three distinct preprocessing strategies. This is intentional: gradient-boosting trees and embedding-based neural nets benefit from different input formats.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabularx}{\linewidth}{lXXX}
+\toprule
+\textbf{Family} & \textbf{Numeric NA} & \textbf{Categorical NA} & \textbf{Encoding} \\
+\midrule
+Linear baselines (sklearn pipeline) & median impute & most-frequent impute & one-hot (\texttt{handle\_unknown=ignore}) \\
+Gradient boosters (XGB/LGB/CatBoost) & median impute & most-frequent / native CatBoost handling & one-hot or native categorical \\
+TabM neural ensemble & Optuna-chosen (mean / median / KNN / iterative) & Optuna-chosen (most-frequent / dedicated ``special'' bucket) & \texttt{OrdinalEncoder} shifted by $+1$ so index 0 reserves the missing/unknown bucket \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Exploratory notebook}
+
+\texttt{notebooks/eda\_starter.ipynb} contains the initial data-exploration notebook (loaded into Jupyter or Colab). It is not executed by the pipelines; it is reference material.
+
+\section{Feature Engineering}\label{sec:fe}
+
+Each modeling track has its own feature-engineering implementation; column names diverge across tracks but the underlying intuitions are similar. We do not attempt to merge them --- each track was tuned end-to-end against its own preprocessing.
+
+\subsection{Packaged sklearn pipeline (\texttt{src/creditsense/features.py})}
+
+The function \texttt{add\_engineered\_features} appends, conditional on each input column existing:
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Missing-flag features} for every column in \texttt{MEANINGFUL\_MISSING\_COLUMNS} (suffix \texttt{\_missing\_flag}).
+  \item \textbf{Aggregate balances and ratios:} \texttt{total\_outstanding\_debt} (sum of mortgage/auto/student loan), \texttt{debt\_to\_assets}, \texttt{unused\_credit\_ratio}, \texttt{income\_per\_dependent}, \texttt{loan\_to\_assets}, \texttt{requested\_payment\_burden}, \texttt{credit\_age\_ratio}.
+  \item Helper \texttt{safe\_divide} guards against division by zero.
+\end{itemize}
+
+\subsection{TabM track (\texttt{tune\_tabm\_v2.py})}
+
+The TabM script defines four feature groups, with a top-level switch \texttt{features} chosen by Optuna from \{\texttt{None}, \texttt{basic\_credit}, \texttt{basic\_credit\_plus\_logs}\}:
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \texttt{\_add\_basic\_credit\_features}: \texttt{LiquidAssets} (Savings + Checking), \texttt{TotalDebtApprox}, \texttt{RequestedToAnnualIncome}, \texttt{PaymentToIncomeRatio\_FE}, \texttt{TotalDebtToIncome}, \texttt{CollateralCoverage}.
+  \item \texttt{\_add\_credit\_behavior\_features}: \texttt{TotalLatePayments} (30+60+90 days), \texttt{WeightedLatePayments} ($1\!\cdot\!\text{30d} + 2\!\cdot\!\text{60d} + 3\!\cdot\!\text{90d}$), \texttt{AnyDerogatoryFlag} (bankruptcies $+$ public records $+$ collections $+$ charge-offs $> 0$).
+  \item \texttt{\_add\_time\_features}: \texttt{CreditHistoryYears} = \texttt{CreditHistoryLengthMonths}/12.
+  \item \texttt{\_add\_log\_money\_features}: \texttt{log1p}-transformed money columns (income, balances, requested loan, collateral, monthly payment).
+\end{itemize}
+
+The Optuna-selected feature bundles per task are reported in Section~\ref{sec:tabm-search}.
+
+\section{Model Development}
+
+\subsection{Models tried per task}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabularx}{\linewidth}{lXX}
+\toprule
+\textbf{Family} & \textbf{Classification (Task A)} & \textbf{Regression (Task B)} \\
+\midrule
+Linear baseline & Logistic Regression & Elastic Net \\
+Gradient boosters & XGBoost, LightGBM, CatBoost & XGBoost, LightGBM, CatBoost \\
+Within-track ensemble & Tuned weighted blend (XGB + LGB + LR) & Tuned weighted blend (CatBoost + XGB + LGB) \\
+Neural tabular & TabM v1, TabM v2 & TabM v1, TabM v2 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Hyperparameter tuning with Optuna}\label{sec:tabm-search}
+
+Both Optuna searches use \textbf{TPE sampler} (multivariate, with grouping) and a \textbf{Median pruner} (\texttt{n\_startup\_trials=8}, \texttt{n\_warmup\_steps=1}) so that unpromising trials are aborted mid-CV.
+
+\paragraph{CatBoost (\texttt{credit\_optuna\_search.py}).} Search space includes \texttt{iterations}, \texttt{depth}, \texttt{learning\_rate}, \texttt{l2\_leaf\_reg}, \texttt{random\_strength}, \texttt{bagging\_temperature}, \texttt{border\_count}, plus imputer choices. Best parameters saved to \texttt{artifacts/best\_params\_\{classification,regression\}.json}:
+
+\begin{lstlisting}
+classification: iterations=2812, depth=6, lr=0.0366, l2_leaf_reg=5.53,
+                random_strength=2.37, bagging_temperature=0.41, border_count=220
+regression:    iterations=3800, depth=6, lr=0.0167, l2_leaf_reg=1.40,
+                random_strength=1.11, bagging_temperature=0.64, border_count=183
+\end{lstlisting}
+
+\paragraph{TabM v2 (\texttt{tune\_tabm\_v2.py}).} 60 trials per task, 3-fold CV. Search space spans preprocessing (numeric and categorical imputers, scaling, feature bundle), numeric embedding (\texttt{piecewise-linear}, \texttt{d\_embedding}, \texttt{n\_bins}), architecture type (\texttt{tabm} vs \texttt{tabm-mini}), and training (\texttt{k} heads, \texttt{n\_blocks}, \texttt{d\_block}, dropout, lr, weight decay, batch size, epochs, patience, cosine schedule with warmup, gradient clipping, label smoothing). Best parameters saved to \texttt{artifacts\_hpo/tabm\_v2\_best\_params\_*.json}:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabularx}{\linewidth}{lXX}
+\toprule
+\textbf{Hyperparameter} & \textbf{RiskTier (cls)} & \textbf{InterestRate (reg)} \\
+\midrule
+\texttt{features} & \texttt{None} & \texttt{basic\_credit} \\
+\texttt{numerical\_imputer} & \texttt{mean} & \texttt{median} \\
+\texttt{categorical\_imputer} & \texttt{most\_frequent} & \texttt{special} (own bucket) \\
+\texttt{num\_embedding} & \texttt{piecewise-linear}, $d{=}8$, $n_{\text{bins}}{=}16$ & \texttt{piecewise-linear}, $d{=}16$, $n_{\text{bins}}{=}32$ \\
+\texttt{arch\_type} & \texttt{tabm} & \texttt{tabm-mini} \\
+\texttt{k} (heads) & 48 & 48 \\
+\texttt{n\_blocks}, \texttt{d\_block} & 5, 320 & 5, 320 \\
+\texttt{dropout} & 0.045 & 0.104 \\
+\texttt{lr}, \texttt{weight\_decay} & $1.5\text{e-}3$, $3.4\text{e-}4$ & $3.4\text{e-}4$, $1.9\text{e-}3$ \\
+\texttt{batch\_size}, \texttt{n\_epochs}, \texttt{patience} & 256, 53, 15 & 256, 122, 23 \\
+LR schedule & cosine, no warmup & no cosine, 5-epoch warmup \\
+\texttt{label\_smoothing} & 0.044 & --- \\
+CV best ($\text{\_best\_value}$) & \textbf{0.8895} (Acc) & \textbf{0.8494} ($R^2$) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Overfitting controls}
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Cross-validation in tuning:} 3-fold CV scores drive Optuna; the median pruner kills trials that fall below the running median after the first fold.
+  \item \textbf{TabM internal ensemble:} the $k{=}48$ parallel heads act as in-model bagging --- inference averages across heads, smoothing single-seed noise.
+  \item \textbf{Regularization:} dropout, weight decay, label smoothing, gradient clipping (TabM v2); \texttt{l2\_leaf\_reg}, \texttt{bagging\_temperature}, \texttt{random\_strength} (CatBoost).
+  \item \textbf{Early stopping:} TabM uses Optuna-chosen \texttt{patience}; CatBoost uses a capped \texttt{iterations}.
+  \item \textbf{Train/val separation:} the packaged pipeline never trains on its holdout; the Optuna searches never train on a CV fold's validation portion.
+\end{itemize}
+
+\section{Results}
+
+\subsection{Holdout validation (sklearn pipeline)}
+
+From \texttt{outputs/experiment\_results.csv} (80/20 stratified holdout, seed 1215):
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Configuration} & \textbf{Task A Acc} & \textbf{Task B $R^2$} & \textbf{Combined} \\
+\midrule
+Logistic / Elastic-Net (raw features, baseline) & 0.634 & 0.618 & 0.626 \\
+XGBoost + engineered features & 0.792 & 0.840 & 0.816 \\
+LightGBM + engineered features & 0.791 & 0.839 & 0.815 \\
+CatBoost + engineered features (regressor) & --- & 0.846 & --- \\
+Tuned weighted ensemble (engineered) & \textbf{0.798} & \textbf{0.847} & \textbf{0.822} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The classic-track summary is captured in \texttt{outputs/run\_summary.json}: best classification model = tuned weighted ensemble (val Acc 0.798); best regression model = tuned weighted ensemble (val $R^2$ 0.847); combined local score 0.822.
+
+\subsection{CatBoost cross-validation (Optuna)}
+
+From \texttt{artifacts/imputer\_search\_\{classification,regression\}.csv}, top row of each (best imputer + feature combo found):
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Task} & \textbf{Best CV score} & \textbf{Imputer (numeric / categorical)} \\
+\midrule
+Classification (Acc) & 0.816 & mean / most\_frequent \\
+Regression ($R^2$) & 0.837 & mean / special \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{TabM cross-validation (Optuna)}
+
+From the \texttt{\_best\_value} field in \texttt{artifacts\_hpo/tabm\_v2\_best\_params\_*.json}:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Task} & \textbf{TabM v2 CV score} & \textbf{TabM v1 (no CV recorded)} \\
+\midrule
+Classification (Acc) & 0.8895 & --- \\
+Regression ($R^2$) & 0.8494 & --- \\
+Combined CV mean & 0.8695 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Kaggle public leaderboard (final scoring)}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llc}
+\toprule
+\textbf{Submission file} & \textbf{Source script} & \textbf{Public LB} \\
+\midrule
+Baseline (template, reference only) & --- & $\approx 0.51$ \\
+\texttt{submission.csv} (sklearn ensemble baseline) & \texttt{train.py} family & 0.82717 \\
+\texttt{submission\_classic.csv} & \texttt{train\_classic\_submission.py} & 0.84443 \\
+\texttt{submission.csv} (TabM v1) & \texttt{train\_tabm\_submission.py} & 0.87417 \\
+\textbf{\texttt{submission\_tabm\_v2.csv}} (final) & \texttt{train\_tabm\_kfold\_submission.py} & \textbf{0.88110} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Note on attribution.} Public-LB scores above are user-reported from the Kaggle competition page; they are not automatically reproduced by the repository. The submission CSV files themselves are committed (the predictions Kaggle scored), but the leaderboard positions are external metadata.
+
+\subsection{Did the same features matter for both tasks?}
+
+No. Optuna selected different feature bundles for the two TabM models: the classifier preferred raw features (\texttt{features=None}) with cosine LR + label smoothing; the regressor preferred the \texttt{basic\_credit} bundle with a dedicated missing bucket and warmup-only schedule. The CatBoost track also picked different imputers per task (\texttt{most\_frequent} vs \texttt{special}). The final per-task feature/preprocessing choices are not shared across tasks; only the model family is shared.
+
+\section{Strengths, Weaknesses, and Next Improvements}
+
+\subsection{Strengths}
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Multiple validation regimes.} The packaged pipeline holds out a fixed 20\% slice; Optuna runs 3-fold CV. Both regimes agree on the model ranking.
+  \item \textbf{Tuned hyperparameters preserved.} Every modeling track that was used to produce a committed submission has its parameters serialized to JSON in \texttt{artifacts/} or \texttt{artifacts\_hpo/}, so submissions can be regenerated from source $+$ data $+$ JSON without re-running the search.
+  \item \textbf{Meaningful-missing handling.} \texttt{MEANINGFUL\_MISSING\_COLUMNS} is a single source of truth for the columns where NaN encodes a real category; missing-flags and the TabM ``special'' categorical bucket both consume it.
+  \item \textbf{Clear progression.} Baseline ($\approx 0.626$ combined) $\rightarrow$ engineered features + boosters ($\approx 0.822$) $\rightarrow$ Optuna-tuned CatBoost (LB 0.844) $\rightarrow$ Optuna-tuned TabM (LB 0.881). Each step adds verifiable evidence.
+\end{itemize}
+
+\subsection{Weaknesses}
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item \textbf{Duplicated feature-engineering logic.} \texttt{src/creditsense/features.py} and \texttt{tune\_tabm\_v2.py} each define their own ratio/aggregate features with overlapping but non-identical column names (\texttt{total\_outstanding\_debt} vs \texttt{TotalDebtApprox}, etc.). Changing one does not update the other.
+  \item \textbf{Inconsistent random seeds across tracks} (1215 vs 42). Within a track, results are deterministic; cross-track local comparisons are approximate.
+  \item \textbf{Blend track removed.} A weighted TabM + CatBoost blend was attempted (originally in \texttt{train\_ensemble\_submission.py}) but its public-LB score was lower than pure TabM, so the script was excluded from the commit. The negative result is documented here but no diagnostic data was saved.
+\end{itemize}
+
+\subsection{Next improvements}
+
+\begin{itemize}[leftmargin=*,nosep]
+  \item Consolidate feature engineering into \texttt{src/creditsense/features.py} and have all training scripts import the same \texttt{add\_engineered\_features} (with an opt-in flag for log transforms).
+  \item Try stacking instead of blending: train a lightweight meta-learner on TabM and CatBoost out-of-fold predictions, rather than fixed convex weights.
+  \item Run TabM with a wider \texttt{k} sweep (current best is $k{=}48$); if compute allows, $k{=}64$--$96$ with stronger weight-decay may help.
+\end{itemize}
+
+\section{Submission Readiness}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lc}
+\toprule
+\textbf{Checklist item} & \textbf{Status} \\
+\midrule
+Reproducible reruns of final submission & \textbf{Yes} (with manual install caveat) \\
+Kaggle submission CSV present & \textbf{Yes} (\texttt{submission\_tabm\_v2.csv}) \\
+Code handoff (clean, runnable) & \textbf{Yes} \\
+Written-report content available & \textbf{Yes} (this report + \texttt{presentation\_brief.md}) \\
+Tuned hyperparameters preserved & \textbf{Yes} (\texttt{artifacts\_hpo/}) \\
+EDA notebook included & \textbf{Yes} (\texttt{notebooks/eda\_starter.ipynb}) \\
+Random seeds fixed & \textbf{Yes} (per-track) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Open items for hand-in.}
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Confirm the team name and Kaggle handles on the title page.
+  \item Confirm that the submission selected on Kaggle (before the deadline) is \texttt{submission\_tabm\_v2.csv}.
+\end{enumerate}
+
+\vspace{1em}
+\noindent\rule{\linewidth}{0.4pt}
+\small Repository commit: \texttt{git rev-parse HEAD} after running \texttt{git init} $+$ this commit will report the hash. Initial commit hash at the time of writing: \texttt{9ddf26e}.
+
+\end{document}
